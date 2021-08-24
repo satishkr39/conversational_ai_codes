@@ -1,5 +1,11 @@
 import json
 from datetime import datetime
+from random import choice
+import boto3
+
+# initialization for dynamo db
+dynamo_db = boto3.resource('dynamodb')
+table = dynamo_db.Table('hotel_booking_details_sk')
 
 event = {
     "messageVersion": "1.0",
@@ -109,6 +115,7 @@ event = {
     "activeContexts": []
 }
 
+
 def dialog_close(message, session_attributes={}, fulfilled=False):
     return {
         "sessionAttributes": session_attributes,
@@ -203,27 +210,99 @@ def book_hotel(event):
                                               {
                                                   **slots,
                                                   "toDate": None,
-                                                  "roomType":None,
-                                                  "rooms":None
+                                                  "roomType": None,
+                                                  "rooms": None
                                               },
                                               session_attributes
                                               )
                 print(response)
                 return response
         return response
+
+    # before closing out the response we will enter the details in our dynamo db
+    table.put_item(
+        Item={
+            "id": str(round(datetime.now().timestamp())),
+            **slots
+        }
+    )
+
     # the portion below runs on fulfillment of all the slots
     return dialog_close(
-                        message=plainText("Thank you for booking with us"),
-                        session_attributes=session_attributes,
-                        fulfilled=True
-                        )
+        message=plainText("Thank you for booking with us. Please refer below for the details of your booking."),
+        session_attributes=session_attributes,
+        fulfilled=True
+    )
+
+
+# greet user intent method to wish user
+def greet_user(event):
+    print("Greet User Method Called")
+    greet_list = ['Hi', 'Hello', 'Hey there']
+    session_attributes = event.get("sessionAttributes", {})
+    return dialog_close(
+        message=plainText(choice(greet_list)),
+        session_attributes=session_attributes,
+        fulfilled=True
+    )
+
+
+# intent method for bot capabilities
+def bot_capabilities(event):
+    input_word = event.get('inputTranscript', None)
+    print(input_word)
+    session_attributes = event.get('sessionAttributes', {})
+    return dialog_close(
+        message=plainText("Hi, My Name is Lex ChatBot. And I can help you in booking hotel tickets"),
+        session_attributes=session_attributes,
+        fulfilled=True
+    )
+
+
+# get details of booking : read data from dynamo db and show it to user on chatbot
+def get_details_of_booking(event):
+    print(event)
+    print("Get details method called")
+    # get slots of current Intent
+    slots = event["currentIntent"]["slots"]
+    ticketNumber = slots["ticketNumber"]  # getting the user ticket number
+    print(ticketNumber)
+    response = table.get_item(
+        Key={
+            'id': ticketNumber
+        }
+    )
+    print("response is : ", response)
+    item = response['Item']
+    print(item)
+    return dialog_close(
+        plainText("Your ticket details are : From City "+item['whichCity']+" to Date is :  "+item["toDate"]+
+                                                "Date is:"+item["toDate"]),
+        fulfilled=True
+    )
+
 
 # Dispatcher Function
 def dispatch(event):
     intent_name = event["currentIntent"]["name"]
+
+    #  book hotel intent
     if intent_name == 'book_hotel_intent_sk':
         return book_hotel(event)
 
+    # greet user intent
+    if intent_name == 'greet_user':
+        print("Greet User Intent Caught")
+        return greet_user(event)
+
+    # bot capibilties intent
+    if intent_name == 'bot_capabilities':
+        print('bot_capabilities intent caught')
+        return bot_capabilities(event)
+
+    if intent_name == 'getDetailOfBooking':
+        print("Inside Get Details of booking Intent")
+        return get_details_of_booking(event)
     # if the Intent Name is not matched then return error
     return Exception("Intent Name Not Found ")
 

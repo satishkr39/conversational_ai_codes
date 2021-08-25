@@ -220,16 +220,28 @@ def book_hotel(event):
         return response
 
     # before closing out the response we will enter the details in our dynamo db
+    id_inserted = str(round(datetime.now().timestamp()))
+    print("ID INSERTED :",id_inserted)
     table.put_item(
         Item={
-            "id": str(round(datetime.now().timestamp())),
+            "id": id_inserted,
             **slots
         }
     )
 
-    # the portion below runs on fulfillment of all the slots
+    # get the ticket number immediate after data is inserted
+    get_inserted_id = table.get_item(
+        Key={
+            "id": id_inserted
+        }
+    )
+    print("GET Inserted ID: ", get_inserted_id)
+    ticket_id = get_inserted_id['Item']['id']  # to get the ID from Item
+    final_message = "Thank you for booking with us. Please keep your ticket details for reference. Ticket number: "+ticket_id
+
+    # the portion below runs on fulfillment of all the slots and shows thank you message and ticketNumber for user refernce
     return dialog_close(
-        message=plainText("Thank you for booking with us. Please refer below for the details of your booking."),
+        message=plainText(final_message),
         session_attributes=session_attributes,
         fulfilled=True
     )
@@ -276,8 +288,8 @@ def get_details_of_booking(event):
     item = response['Item']
     print(item)
     return dialog_close(
-        plainText("Your ticket details are : From City "+item['whichCity']+" to Date is :  "+item["toDate"]+
-                                                "Date is:"+item["toDate"]),
+        plainText("Your ticket details are :\n From City "+item['whichCity']+" \nfrom Date is :  "+item["fromDate"]+
+                                                " \nto Date is:"+item["toDate"]+"\n room type: "+item["roomType"]),
         fulfilled=True
     )
 
